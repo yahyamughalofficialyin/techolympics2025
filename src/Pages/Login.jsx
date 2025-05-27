@@ -6,7 +6,7 @@ import "react-toastify/dist/ReactToastify.css";
 
 const Login = () => {
   const [formData, setFormData] = useState({
-    username: "",
+    email: "", // Changed from username to email to match backend
     password: "",
   });
   const [loading, setLoading] = useState(false);
@@ -17,14 +17,14 @@ const Login = () => {
     const checkLoggedIn = async () => {
       try {
         const response = await axios.get(
-          "http://localhost:5000/api/admin/current",
+          "http://localhost:5000/api/admin/check-session",
           { withCredentials: true }
         );
-        if (response.data) {
-          navigate("/dashboard");
+        if (response.data.isLoggedIn) {
+          navigate("/");
         }
       } catch (error) {
-        // Not logged in, stay on login page
+        console.log("Not logged in");
       }
     };
     checkLoggedIn();
@@ -42,7 +42,7 @@ const Login = () => {
     e.preventDefault();
     
     // Basic validation
-    if (!formData.username || !formData.password) {
+    if (!formData.email || !formData.password) {
       toast.error("Please fill in all fields", {
         position: "top-right",
         autoClose: 3000,
@@ -56,25 +56,24 @@ const Login = () => {
       const response = await axios.post(
         "http://localhost:5000/api/admin/login",
         formData,
-        { withCredentials: true }
+        { 
+          withCredentials: true,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
       );
 
-      if (response.data.message === "Login successful") {
-        // Clear form
-        setFormData({
-          username: "",
-          password: "",
-        });
-
+      if (response.data.message === "Login successful!") {
         // Show success message
         toast.success(`Welcome, ${response.data.admin.username}`, {
           position: "top-right",
           autoClose: 2000,
         });
 
-        // Redirect to dashboard
+        // Redirect to dashboard after delay
         setTimeout(() => {
-          navigate("/dashboard");
+          navigate("/");
         }, 2000);
       }
     } catch (error) {
@@ -106,15 +105,16 @@ const Login = () => {
                   
                   <form onSubmit={handleSubmit}>
                     <div className="mb-3">
-                      <label htmlFor="username" className="form-label">Username</label>
+                      <label htmlFor="email" className="form-label">Email</label>
                       <input
-                        type="text"
+                        type="email"
                         className="form-control"
-                        id="username"
-                        name="username"
-                        value={formData.username}
+                        id="email"
+                        name="email"
+                        value={formData.email}
                         onChange={handleChange}
                         required
+                        autoComplete="username"
                       />
                     </div>
                     
@@ -128,6 +128,7 @@ const Login = () => {
                         value={formData.password}
                         onChange={handleChange}
                         required
+                        autoComplete="current-password"
                       />
                     </div>
                     
@@ -137,6 +138,7 @@ const Login = () => {
                           className="form-check-input primary"
                           type="checkbox"
                           id="flexCheckChecked"
+                          name="rememberMe"
                         />
                         <label className="form-check-label text-dark" htmlFor="flexCheckChecked">
                           Remember me
@@ -155,7 +157,7 @@ const Login = () => {
                       {loading ? (
                         <>
                           <span className="spinner-border spinner-border-sm" aria-hidden="true"></span>
-                          Signing In...
+                          <span className="ms-2">Signing In...</span>
                         </>
                       ) : (
                         "Sign In"
@@ -164,7 +166,7 @@ const Login = () => {
                     
                     <div className="d-flex align-items-center justify-content-center">
                       <p className="fs-4 mb-0 fw-bold">New to Admin Panel?</p>
-                      <Link className="text-primary fw-bold ms-2" to="/signup">
+                      <Link className="text-primary fw-bold ms-2" to="/register">
                         Create an account
                       </Link>
                     </div>

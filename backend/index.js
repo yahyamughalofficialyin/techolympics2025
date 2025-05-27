@@ -5,30 +5,27 @@ const connectDB = require("./config/db");
 const Joi = require("joi");
 const cors = require("cors");
 const session = require("express-session");
+const MongoStore = require("connect-mongo");
 const upload = require("./middleware/upload");
 
 // Importing Controllers
 const roleController = require("./controllers/roleController");
 const userController = require("./controllers/userController");
+const adminController = require("./controllers/adminController");
 const categoryController = require("./controllers/categoryController");
 const productController = require("./controllers/productController");
 
 const app = express();
 
-app.use(
-  session({
-    secret: process.env.SESSIONCODE,
-    resave: false,
-    saveUninitialized: true,
-    cookie: { secure: true }
-  })
-);
+// Connect to MongoDB Atlas
+connectDB();
 
-const PORT = process.env.PORT || 5000;
-
+// Enhanced CORS configuration
 const corsOptions = {
   origin: "http://localhost:3000",
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 };
 
 // Enable CORS for all routes
@@ -36,77 +33,106 @@ app.use(cors(corsOptions));
 
 // Middleware
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Connect to MongoDB Atlas
-connectDB();
+// Enhanced Session Configuration
+app.use(
+  session({
+    name: 'hotel.sid', // Session ID cookie name
+    secret: process.env.SESSIONCODE || 'your-strong-secret-here', // Use environment variable
+    resave: false,
+    saveUninitialized: false,
+    store: MongoStore.create({
+      mongoUrl: process.env.MONGO_URI, // Your MongoDB connection string
+      collectionName: 'sessions',
+      ttl: 24 * 60 * 60, // 1 day
+      autoRemove: 'native' // Automatically remove expired sessions
+    }),
+    cookie: {
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production', // Set to true in production with HTTPS
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+    }
+  })
+);
 
-// **********************************************************ROLE CRUD**********************************************************
+// Session debugging middleware (optional)
+app.use((req, res, next) => {
+  console.log('Session ID:', req.sessionID);
+  console.log('Session data:', req.session);
+  next();
+});
 
-// **1. CREATE - Add Role**
+const PORT = process.env.PORT || 5000;
+
+// **********************************************************
+// HEALTH CHECK ENDPOINT
+// **********************************************************
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    session: req.session,
+    sessionId: req.sessionID
+  });
+});
+
+// **********************************************************
+// ROLE CRUD
+// **********************************************************
 app.post("/api/role/create", roleController.createRole);
-
-// **2. READ - Get All Roles**
 app.get("/api/role/", roleController.readallRole);
-
-// **3. READ - Get Role by ID**
 app.get("/api/role/:id", roleController.readRole);
-
-// **4. UPDATE - Update Role by ID**
 app.put("/api/role/update/:id", roleController.updateRole);
-
-// **5. DELETE - Delete Role by ID**
 app.delete("/api/role/delete/:id", roleController.deleteRole);
 
-// **********************************************************USER CRUD**********************************************************
-// Create User (with image upload)
+// **********************************************************
+// USER CRUD
+// **********************************************************
 app.post("/api/user/create", upload.single("image"), userController.createUser);
-
-// Get all users
 app.get("/api/user/", userController.getAllUsers);
-
-// Get single user
 app.get("/api/user/:id", userController.getUser);
-
-// Update user (with optional image upload)
 app.put("/api/user/update/:id", upload.single("image"), userController.updateUser);
-
-// Delete user
 app.delete("/api/user/delete/:id", userController.deleteUser);
 
+// **********************************************************
+// ADMIN CRUD
+// **********************************************************
+app.post("/api/admin/create", upload.single("image"), adminController.createAdmin);
+app.post("/api/admin/login", adminController.loginAdmin);
+app.post("/api/admin/logout", adminController.logoutAdmin);
+app.get("/api/admin/check-session", adminController.checkAdminSession);
+app.get("/api/admin/", adminController.getAllAdmins);
+app.get("/api/admin/:id", adminController.getAdmin);
+app.put("/api/admin/update/:id", upload.single("image"), adminController.updateAdmin);
+app.delete("/api/admin/delete/:id", adminController.deleteAdmin);
 
-// **********************************************************CATEGORY CRUD**********************************************************
-
-// **1. CREATE - Add Category**
+// **********************************************************
+// CATEGORY CRUD
+// **********************************************************
 app.post("/api/category/create", categoryController.createCategory);
-
-// **2. READ - Get All Categories**
 app.get("/api/category/", categoryController.getAllCategories);
-
-// **3. READ - Get Category by ID**
 app.get("/api/category/:id", categoryController.getCategory);
-
-// **4. UPDATE - Update Category by ID**
 app.put("/api/category/update/:id", categoryController.updateCategory);
-
-// **5. DELETE - Delete Category by ID**
 app.delete("/api/category/delete/:id", categoryController.deleteCategory);
 
-// **********************************************************PRODUCT CRUD**********************************************************
-
-// 1. CREATE - Add Product (with required image upload)
+// **********************************************************
+// PRODUCT CRUD
+// **********************************************************
 app.post("/api/product/create", upload.single("image"), productController.createProduct);
-
-// 2. READ - Get All Products
 app.get("/api/product/", productController.getAllProducts);
-
-// 3. READ - Get Product by ID
 app.get("/api/product/:id", productController.getProduct);
-
-// 4. UPDATE - Update Product by ID (with optional image upload)
 app.put("/api/product/update/:id", upload.single("image"), productController.updateProduct);
-
-// 5. DELETE - Delete Product by ID
 app.delete("/api/product/delete/:id", productController.deleteProduct);
 
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ message: 'Something broke!', error: err.message });
+});
+
 // Start Server
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Session secret: ${process.env.SESSIONCODE || 'using-fallback-secret'}`);
+});
